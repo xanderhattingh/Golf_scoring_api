@@ -1,0 +1,166 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+
+class PlayerController extends Controller
+{
+    /**
+     * Get all players (both registered users and invited players)
+     * Excludes the currently authenticated user
+     */
+    public function index(Request $request)
+    {
+        $currentUserId = Auth::id();
+
+        $players = User::select('id', 'name', 'surname', 'phone', 'handicap', 'invite_code', 'created_at')
+            ->orderBy('name')
+            ->get()
+            ->map(function ($player) {
+                return [
+                    'id' => $player->id,
+                    'name' => $player->name,
+                    'surname' => $player->surname,
+                    'phone' => $player->phone,
+                    'handicap' => $player->handicap,
+                    'invite_code' => $player->invite_code,
+                    'is_registered' => $player->isRegistered(),
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'data' => $players
+        ]);
+    }
+
+    /**
+     * Create a new player (invited user)
+     */
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'surname' => 'required|string|max:255',
+            'phone' => 'nullable|string|unique:users,phone',
+            'handicap' => 'nullable|integer|min:0|max:54',
+        ]);
+
+        // Generate unique 6-digit invite code
+        $inviteCode = $this->generateUniqueInviteCode();
+
+        $player = User::create([
+            'name' => $validated['name'],
+            'surname' => $validated['surname'],
+            'phone' => $validated['phone'] ?? null,
+            'handicap' => $validated['handicap'] ?? 0,
+            'password' => null, // No password yet - invited player
+            'invite_code' => $inviteCode,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Player created successfully',
+            'data' => [
+                'id' => $player->id,
+                'name' => $player->name,
+                'surname' => $player->surname,
+                'phone' => $player->phone,
+                'handicap' => $player->handicap,
+                'invite_code' => $player->invite_code,
+                'is_registered' => false,
+            ]
+        ], 201);
+    }
+
+    /**
+     * Update a player
+     */
+    public function update(Request $request, $id)
+    {
+        $player = User::find($id);
+
+        if (!$player) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Player not found'
+            ], 404);
+        }
+
+        // Don't allow updating registered users through player endpoint
+        if ($player->isRegistered() && $player->id !== Auth::id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot update registered users'
+            ], 403);
+        }
+
+        $validated = $request->validate([
+            'name' => 'sometimes|string|max:255',
+            'surname' => 'sometimes|string|max:255',
+            'phone' => 'nullable|string|unique:users,phone,' . $id,
+            'handicap' => 'nullable|integer|min:0|max:54',
+        ]);
+
+        $player->update($validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Player updated successfully',
+            'data' => [
+                'id' => $player->id,
+                'name' => $player->name,
+                'surname' => $player->surname,
+                'phone' => $player->phone,
+                'handicap' => $player->handicap,
+                'invite_code' => $player->invite_code,
+                'is_registered' => $player->isRegistered(),
+            ]
+        ]);
+    }
+
+    /**
+     * Delete a player
+     */
+    public function destroy(Request $request, $id)
+    {
+        $player = User::find($id);
+
+        if (!$player) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Player not found'
+            ], 404);
+        }
+
+        // Don't allow deleting registered users (only invited players)
+        if ($player->isRegistered()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot delete registered users'
+            ], 403);
+        }
+
+        $player->delete();
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Player deleted successfully'
+        ]);
+    }
+
+    /**
+     * Generate a unique 6-digit invite code
+     */
+    private function generateUniqueInviteCode(): string
+    {
+        do {
+            $code = str_pad((string)random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        } while (User::where('invite_code', $code)->exists());
+
+        return $code;
+    }
+}
