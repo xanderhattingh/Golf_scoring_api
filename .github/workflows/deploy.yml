@@ -19,7 +19,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script_stop: true
           script: |
-            cd /var/www/golfscoring-api
+            cd /var/www/golfscoring-api/Golf_scoring_api
             git pull origin master
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
