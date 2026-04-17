@@ -20,6 +20,7 @@ jobs:
           script_stop: true
           script: |
             cd /var/www/golfscoring-api/Golf_scoring_api
+            git reset --hard HEAD
             git pull origin master
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
