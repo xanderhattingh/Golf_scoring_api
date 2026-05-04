@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\CourseController;
+use App\Http\Controllers\FriendController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PlayerController;
 use App\Http\Controllers\RoundsController;
@@ -24,8 +25,19 @@ Route::post('/login', [UserController::class, 'login']);
 */
 
 Route::middleware('auth:sanctum')->group(function () {
+    // User
+    Route::get('/user', [UserController::class, 'me']);
+    Route::put('/user', [UserController::class, 'updateProfile']);
+    Route::put('/user/password', [UserController::class, 'updatePassword']);
+
+    // Friends
+    Route::get('/friends', [FriendController::class, 'index']);
+    Route::post('/friends', [FriendController::class, 'store']);
+    Route::delete('/friends/{friendId}', [FriendController::class, 'destroy']);
+
     // Players
     Route::get('/players', [PlayerController::class, 'index']);
+    Route::get('/players/search', [PlayerController::class, 'search']);
     Route::post('/players', [PlayerController::class, 'store']);
     Route::put('/players/{id}', [PlayerController::class, 'update']);
     Route::delete('/players/{id}', [PlayerController::class, 'destroy']);

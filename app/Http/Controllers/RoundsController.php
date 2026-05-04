@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AnimalEvent;
 use App\Models\CourseTees;
+use App\Models\Friend;
 use App\Models\HoleScore;
 use App\Models\Round;
 use App\Models\RoundHole;
@@ -159,6 +160,12 @@ class RoundsController extends Controller
                     'par' => $hole->par,
                     'stroke_index' => $hole->stroke_index,
                 ]);
+            }
+
+            // Create friendships between round creator and all players
+            $creatorId = Auth::id();
+            foreach ($validated['player_ids'] as $playerId) {
+                Friend::createFriendship($creatorId, $playerId);
             }
 
             DB::commit();

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
@@ -15,6 +16,7 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'surname',
+        'email',
         'phone',
         'password',
         'invite_code',
@@ -55,5 +57,14 @@ class User extends Authenticatable
     public function scopeInvited($query)
     {
         return $query->whereNull('password');
+    }
+
+    /**
+     * Get all friends of this user.
+     */
+    public function friends(): BelongsToMany
+    {
+        return $this->belongsToMany(User::class, 'friends', 'user_id', 'friend_id')
+            ->withTimestamps();
     }
 }

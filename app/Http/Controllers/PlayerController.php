@@ -2,12 +2,44 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Friend;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class PlayerController extends Controller
 {
+    /**
+     * Search players by name, surname, or phone.
+     */
+    public function search(Request $request)
+    {
+        $query = $request->get('q');
+
+        $players = User::select('id', 'name', 'surname', 'phone', 'handicap', 'email')
+            ->when($query, function ($q) use ($query) {
+                $words = array_filter(explode(' ', trim($query)));
+                $q->where(function ($sub) use ($words) {
+                    foreach ($words as $word) {
+                        $term = '%' . strtolower($word) . '%';
+                        $sub->where(function ($inner) use ($term) {
+                            $inner->whereRaw('LOWER(name) LIKE ?', [$term])
+                                  ->orWhereRaw('LOWER(surname) LIKE ?', [$term])
+                                  ->orWhereRaw('LOWER(phone) LIKE ?', [$term])
+                                  ->orWhereRaw("LOWER(CONCAT(name, ' ', surname)) LIKE ?", [$term]);
+                        });
+                    }
+                });
+            })
+            ->limit(10)
+            ->get();
+
+        return response()->json([
+            'success' => true,
+            'data' => $players,
+        ]);
+    }
+
     /**
      * Get all players (both registered users and invited players)
      * Excludes the currently authenticated user
@@ -60,6 +92,9 @@ class PlayerController extends Controller
             'password' => null, // No password yet - invited player
             'invite_code' => $inviteCode,
         ]);
+
+        // Create friendship between the creator and the invited player
+        Friend::createFriendship(Auth::id(), $player->id);
 
         return response()->json([
             'success' => true,
