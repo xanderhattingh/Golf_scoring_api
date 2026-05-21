@@ -24,7 +24,7 @@ jobs:
             git pull origin master
             composer install --no-dev --optimize-autoloader
             php artisan migrate --force
-            php artisan db:seed
+            php artisan db:seed --force
             php artisan optimize
             chown -R www-data:www-data storage bootstrap/cache
             chmod -R 775 storage bootstrap/cache
