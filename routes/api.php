@@ -50,6 +50,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/courses/{id}', [CourseController::class, 'update']);
     Route::delete('/courses/{id}', [CourseController::class, 'destroy']);
 
+    // Tees
+    Route::post('/tees', [CourseController::class, 'createTee']);
+
     // Scoring Methods
     Route::get('/scoring-methods', [ScoringMethodController::class, 'index']);
 

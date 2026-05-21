@@ -80,6 +80,39 @@ class CourseController extends Controller
     }
 
     /**
+     * Create a new tee type
+     */
+    public function createTee(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string|max:255',
+            'colour_code' => 'nullable|string|max:7',
+        ]);
+
+        // Case-insensitive lookup to avoid duplicates
+        $tee = Tees::whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])->first();
+
+        if (!$tee) {
+            $tee = Tees::create([
+                'name' => ucfirst(strtolower($validated['name'])),
+                'description' => $validated['description'] ?? ucfirst(strtolower($validated['name'])),
+                'colour_code' => $validated['colour_code'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'id' => $tee->id,
+                'name' => $tee->name,
+                'description' => $tee->description,
+                'colour_code' => $tee->colour_code,
+            ]
+        ]);
+    }
+
+    /**
      * Create a new course with tee data
      */
     public function store(Request $request)
