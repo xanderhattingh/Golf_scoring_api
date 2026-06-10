@@ -17,7 +17,7 @@ class FriendController extends Controller
         $user = Auth::user();
 
         $friends = $user->friends()
-            ->select('users.id', 'users.name', 'users.surname', 'users.phone', 'users.handicap', 'users.invite_code')
+            ->select('users.id', 'users.name', 'users.surname', 'users.phone', 'users.handicap', 'users.invite_code', 'users.password')
             ->orderBy('users.name')
             ->get()
             ->map(function ($friend) {

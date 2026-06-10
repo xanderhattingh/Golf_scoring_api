@@ -18,7 +18,6 @@ class CourseController extends Controller
     public function index(Request $request)
     {
         $courses = Courses::with(['courseTees.tee', 'courseTees.holes'])
-            ->where('created_by', Auth::id())
             ->orderBy('name')
             ->get()
             ->map(function ($course) {
