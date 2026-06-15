@@ -13,18 +13,58 @@ use Illuminate\Support\Facades\DB;
 class CourseController extends Controller
 {
     /**
-     * Get all courses with their tees and holes
+     * Get courses with their tees and holes.
+     *
+     * Query params:
+     *   - search: filter by name/location (case-insensitive), capped at `limit` (default 25)
+     *   - lat & lng: return the nearest courses by distance, capped at `limit` (default 10)
+     *   - limit: override the cap; with neither search nor coords, omit to return all
+     * (No params returns all courses — keeps the round/tournament pickers working.)
      */
     public function index(Request $request)
     {
-        $courses = Courses::with(['courseTees.tee', 'courseTees.holes'])
-            ->orderBy('name')
-            ->get()
+        $search = trim((string) $request->query('search', ''));
+        $lat    = $request->query('lat');
+        $lng    = $request->query('lng');
+        $limit  = (int) $request->query('limit', 0);
+
+        $query = Courses::with(['courseTees.tee', 'courseTees.holes']);
+
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ILIKE', "%{$search}%")
+                    ->orWhere('location', 'ILIKE', "%{$search}%");
+            })->orderBy('name');
+            $limit = $limit ?: 25;
+        } elseif (is_numeric($lat) && is_numeric($lng)) {
+            // Nearest first, via the haversine great-circle distance (km)
+            $query->whereNotNull('latitude')
+                ->whereNotNull('longitude')
+                ->select('courses.*')
+                ->selectRaw(
+                    '(6371 * acos(LEAST(1, cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) + sin(radians(?)) * sin(radians(latitude))))) AS distance_km',
+                    [(float) $lat, (float) $lng, (float) $lat]
+                )
+                ->orderBy('distance_km');
+            $limit = $limit ?: 10;
+        } else {
+            $query->orderBy('name');
+        }
+
+        if ($limit > 0) {
+            $query->limit($limit);
+        }
+
+        $courses = $query->get()
             ->map(function ($course) {
                 return [
                     'id' => $course->id,
                     'name' => $course->name,
                     'location' => $course->location,
+                    'latitude' => $course->latitude,
+                    'longitude' => $course->longitude,
+                    'phone' => $course->phone,
+                    'distance_km' => isset($course->distance_km) ? round((float) $course->distance_km, 1) : null,
                     'num_holes' => $course->num_holes,
                     'tees' => $course->courseTees->map(function ($courseTee) {
                         return [
@@ -32,6 +72,7 @@ class CourseController extends Controller
                             'tee_id' => $courseTee->tee_id,
                             'tee_name' => $courseTee->tee->name,
                             'tee_description' => $courseTee->tee->description,
+                            'gender' => $courseTee->tee->gender,
                             'colour_code' => $courseTee->tee->colour_code,
                             'course_rating' => $courseTee->course_rating,
                             'slope_rating' => $courseTee->slope_rating,
@@ -68,6 +109,7 @@ class CourseController extends Controller
                 'id' => $tee->id,
                 'name' => $tee->name,
                 'description' => $tee->description,
+                'gender' => $tee->gender,
                 'colour_code' => $tee->colour_code,
             ];
         });
@@ -86,16 +128,21 @@ class CourseController extends Controller
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'description' => 'nullable|string|max:255',
+            'gender' => 'nullable|in:M,F',
             'colour_code' => 'nullable|string|max:7',
         ]);
 
-        // Case-insensitive lookup to avoid duplicates
-        $tee = Tees::whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])->first();
+        // Case-insensitive lookup to avoid duplicates, scoped to gender so a
+        // Men's "Red" and a Ladies' "Red" can coexist
+        $tee = Tees::whereRaw('LOWER(name) = ?', [strtolower($validated['name'])])
+            ->where('gender', $validated['gender'] ?? null)
+            ->first();
 
         if (!$tee) {
             $tee = Tees::create([
                 'name' => ucfirst(strtolower($validated['name'])),
                 'description' => $validated['description'] ?? ucfirst(strtolower($validated['name'])),
+                'gender' => $validated['gender'] ?? null,
                 'colour_code' => $validated['colour_code'] ?? null,
             ]);
         }
@@ -106,6 +153,7 @@ class CourseController extends Controller
                 'id' => $tee->id,
                 'name' => $tee->name,
                 'description' => $tee->description,
+                'gender' => $tee->gender,
                 'colour_code' => $tee->colour_code,
             ]
         ]);

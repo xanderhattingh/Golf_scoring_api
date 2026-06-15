@@ -11,7 +11,10 @@ use App\Models\RoundHole;
 use App\Models\RoundTeam;
 use App\Models\RoundTeamUser;
 use App\Models\RoundUser;
+use App\Models\Tournament_Rounds;
+use App\Models\Tournaments;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -58,7 +61,7 @@ class RoundsController extends Controller
             })
             ->find($id);
 
-        if (! $round) {
+        if (!$round) {
             return response()->json([
                 'success' => false,
                 'message' => 'Round not found',
@@ -88,13 +91,14 @@ class RoundsController extends Controller
             'teams.*.playerIds' => 'required|array',
             'teams.*.playerIds.*' => 'exists:users,id',
             'starting_hole' => 'nullable|integer|in:1,10',
+            'tournament_id' => 'nullable|exists:tournaments,id',
         ]);
 
         $courseTee = CourseTees::where('id', $validated['course_tee_id'])
             ->where('course_id', $validated['course_id'])
             ->first();
 
-        if (! $courseTee) {
+        if (!$courseTee) {
             return response()->json([
                 'success' => false,
                 'message' => 'Selected tee does not belong to this course',
@@ -135,7 +139,7 @@ class RoundsController extends Controller
                 $roundUsers[$playerId] = $roundUser;
             }
 
-            if ($validated['format'] === 'teams' && ! empty($validated['teams'])) {
+            if ($validated['format'] === 'teams' && !empty($validated['teams'])) {
                 foreach ($validated['teams'] as $teamData) {
                     $team = RoundTeam::create([
                         'round_id' => $round->id,
@@ -168,6 +172,14 @@ class RoundsController extends Controller
                 Friend::createFriendship($creatorId, $playerId);
             }
 
+            // If this round was created by joining a tournament, link it
+            if (! empty($validated['tournament_id'])) {
+                Tournament_Rounds::create([
+                    'tournament_id' => $validated['tournament_id'],
+                    'round_id' => $round->id,
+                ]);
+            }
+
             DB::commit();
 
             return response()->json([
@@ -182,7 +194,7 @@ class RoundsController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create round: '.$e->getMessage(),
+                'message' => 'Failed to create round: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -196,7 +208,7 @@ class RoundsController extends Controller
                 });
         })->find($id);
 
-        if (! $round) {
+        if (!$round) {
             return response()->json([
                 'success' => false,
                 'message' => 'Round not found',
@@ -232,7 +244,7 @@ class RoundsController extends Controller
             if (isset($validated['completed'])) {
                 $updateData['completed'] = $validated['completed'];
             }
-            if (! empty($updateData)) {
+            if (!empty($updateData)) {
                 $round->update($updateData);
             }
 
@@ -274,7 +286,7 @@ class RoundsController extends Controller
 
                     foreach ($scoreData['playerScores'] as $playerScore) {
                         $roundUserId = $roundUserMap[$playerScore['playerId']] ?? null;
-                        if (! $roundUserId) {
+                        if (!$roundUserId) {
                             continue;
                         }
 
@@ -289,10 +301,10 @@ class RoundsController extends Controller
                         ]);
                     }
 
-                    if (! empty($scoreData['animalEvents'])) {
+                    if (!empty($scoreData['animalEvents'])) {
                         foreach ($scoreData['animalEvents'] as $event) {
                             $roundUserId = $roundUserMap[$event['playerId']] ?? null;
-                            if (! $roundUserId) {
+                            if (!$roundUserId) {
                                 continue;
                             }
 
@@ -322,7 +334,7 @@ class RoundsController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to update round: '.$e->getMessage(),
+                'message' => 'Failed to update round: ' . $e->getMessage(),
             ], 500);
         }
     }
@@ -331,7 +343,7 @@ class RoundsController extends Controller
     {
         $round = Round::where('created_by', Auth::id())->find($id);
 
-        if (! $round) {
+        if (!$round) {
             return response()->json([
                 'success' => false,
                 'message' => 'Round not found',
@@ -357,7 +369,7 @@ class RoundsController extends Controller
             'players' => $round->roundUsers->map(function ($ru) {
                 return [
                     'id' => $ru->user->id,
-                    'name' => trim($ru->user->name.' '.($ru->user->surname ?? '')),
+                    'name' => trim($ru->user->name . ' ' . ($ru->user->surname ?? '')),
                     'handicap' => $ru->round_handicap,
                 ];
             })->values()->all(),
@@ -398,13 +410,13 @@ class RoundsController extends Controller
                     'strokes' => $score->strokes,
                     'points' => $score->points,
                 ];
-            })->filter(fn ($ps) => $ps['playerId'] !== null)->values()->all();
+            })->filter(fn($ps) => $ps['playerId'] !== null)->values()->all();
 
             $pinkScore = $holeScoreRows->firstWhere('has_pink_ball', true);
             $pinkPlayerId = $pinkScore ? ($roundUserMap[$pinkScore->round_user_id] ?? null) : null;
 
             $animalEvents = $round->animalEvents
-                ->where('hole_number', (int) $holeNumber)
+                ->where('hole_number', (int)$holeNumber)
                 ->map(function ($event) use ($roundUserMap) {
                     return [
                         'playerId' => $roundUserMap[$event->round_user_id] ?? null,
@@ -412,17 +424,17 @@ class RoundsController extends Controller
                         'holeNumber' => $event->hole_number,
                         'timestamp' => ($event->event_at ?? $event->created_at)->toIso8601String(),
                     ];
-                })->filter(fn ($e) => $e['playerId'] !== null)->values()->all();
+                })->filter(fn($e) => $e['playerId'] !== null)->values()->all();
 
             $scores[] = [
-                'holeNumber' => (int) $holeNumber,
+                'holeNumber' => (int)$holeNumber,
                 'playerScores' => $playerScores,
                 'pinkPlayerId' => $pinkPlayerId,
                 'animalEvents' => $animalEvents,
             ];
         }
 
-        usort($scores, fn ($a, $b) => $a['holeNumber'] <=> $b['holeNumber']);
+        usort($scores, fn($a, $b) => $a['holeNumber'] <=> $b['holeNumber']);
 
         $animalHolders = null;
         if (in_array($round->scoring_method_id, [5, 6])) {
@@ -468,7 +480,7 @@ class RoundsController extends Controller
             'players' => $round->roundUsers->map(function ($ru) {
                 return [
                     'id' => $ru->user->id,
-                    'name' => trim($ru->user->name.' '.($ru->user->surname ?? '')),
+                    'name' => trim($ru->user->name . ' ' . ($ru->user->surname ?? '')),
                     'handicap' => $ru->round_handicap,
                     'created_at' => $ru->user->created_at->toIso8601String(),
                 ];
@@ -488,4 +500,6 @@ class RoundsController extends Controller
             'animalHolders' => $animalHolders,
         ];
     }
+    
+
 }

@@ -11,8 +11,16 @@ class Courses extends Model
     protected $fillable = [
         'name',
         'location',
+        'latitude',
+        'longitude',
+        'phone',
         'num_holes',
         'created_by',
+    ];
+
+    protected $casts = [
+        'latitude' => 'float',
+        'longitude' => 'float',
     ];
 
     public function createdBy(): BelongsTo

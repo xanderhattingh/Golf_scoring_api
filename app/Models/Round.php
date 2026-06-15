@@ -4,7 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Round extends Model
 {
@@ -64,5 +66,10 @@ class Round extends Model
     public function animalEvents(): HasMany
     {
         return $this->hasMany(AnimalEvent::class, 'round_id');
+    }
+
+    public function tournament(): HasOne
+    {
+        return $this->hasOne(Tournament_Rounds::class, 'round_id', 'id');
     }
 }

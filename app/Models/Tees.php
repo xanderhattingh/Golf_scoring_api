@@ -10,6 +10,7 @@ class Tees extends Model
     protected $fillable = [
         'name',
         'description',
+        'gender',
         'colour_code',
     ];
 

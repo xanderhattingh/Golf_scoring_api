@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\FriendController;
+use App\Http\Controllers\TournamentsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PlayerController;
 use App\Http\Controllers\RoundsController;
@@ -62,6 +63,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/rounds/{id}', [RoundsController::class, 'show']);
     Route::put('/rounds/{id}', [RoundsController::class, 'update']);
     Route::delete('/rounds/{id}', [RoundsController::class, 'destroy']);
+
+    //Tournaments
+    Route::get('/tournaments', [TournamentsController::class, 'index']);
+    Route::get('/tournaments/lookup/{code}', [TournamentsController::class, 'lookup']);
+    Route::post('/tournaments', [TournamentsController::class, 'store']);
+    Route::delete('/tournaments/{id}', [TournamentsController::class, 'destroy']);
+
 });
 
 /*
