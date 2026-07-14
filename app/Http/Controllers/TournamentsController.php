@@ -18,6 +18,11 @@ class TournamentsController extends Controller
             'course_id' => 'required|exists:courses,id',
             'tee_id' => 'required|exists:course_tees,id',
             'scoring_method_id' => 'required|exists:scoring_methods,id',
+            // Four Ball Alliance: how many scores count per hole, by par
+            'scoring_config' => 'nullable|array',
+            'scoring_config.alliance.par3' => 'nullable|integer|min:1|max:4',
+            'scoring_config.alliance.par4' => 'nullable|integer|min:1|max:4',
+            'scoring_config.alliance.par5' => 'nullable|integer|min:1|max:4',
         ]);
 
         // Tee must belong to the chosen course
@@ -44,6 +49,7 @@ class TournamentsController extends Controller
             'course_id' => $validated['course_id'],
             'tee_id' => $validated['tee_id'],
             'scoring_method_id' => $validated['scoring_method_id'],
+            'scoring_config' => $validated['scoring_config'] ?? null,
             'status' => 0,
             'invite_code' => $code,
         ]);
@@ -89,6 +95,7 @@ class TournamentsController extends Controller
                 'tee_id' => $tournament->tee_id,
                 'scoring_method_id' => $tournament->scoring_method_id,
                 'scoring_method' => $tournament->scoring_method,
+                'scoring_config' => $tournament->scoring_config,
                 'course' => $course ? [
                     'id' => $course->id,
                     'name' => $course->name,
@@ -130,8 +137,12 @@ class TournamentsController extends Controller
                 'scoring_method',
                 'course',
                 'rounds.round',
+                'rounds.round.roundHoles',
                 'rounds.roundUsers.user',
                 'rounds.roundUsers.holeScores',
+                // Betterball: teams (of 1-2) per round
+                'rounds.round.roundTeams.roundTeamUsers.roundUser.user',
+                'rounds.round.roundTeams.roundTeamUsers.roundUser.holeScores',
             ])
             ->orderByDesc('created_at')
             ->get();
@@ -145,6 +156,13 @@ class TournamentsController extends Controller
             $tournament->date = $roundDate
                 ? $roundDate->format('Y-m-d')
                 : optional($tournament->created_at)->format('Y-m-d');
+
+            // Expose the underlying round ids so the client can pull full per-round
+            // scorecards on demand (e.g. for the results PDF export).
+            $tournament->round_ids = $tournament->rounds
+                ->map(fn ($tr) => optional($tr->round)->id)
+                ->filter()
+                ->values();
 
             // Flatten every round's players into a single unique players list, each carrying
             // their progress (holes played, strokes, points) and per-round handicap.
@@ -162,6 +180,94 @@ class TournamentsController extends Controller
                 ->values();
 
             $tournament->setRelation('players', $players);
+
+            // Four Ball Alliance: each round is one alliance — rank teams by their
+            // best-N-per-hole total (N by par, from the tournament's config).
+            if ((int) $tournament->scoring_method_id === 8) {
+                $cfg = $tournament->scoring_config['alliance'] ?? ['par3' => 4, 'par4' => 4, 'par5' => 4];
+
+                $alliances = $tournament->rounds->map(function ($tr) use ($cfg) {
+                    $round = $tr->round;
+                    if (! $round) {
+                        return null;
+                    }
+
+                    $parByHole = $round->roundHoles->pluck('par', 'hole_number');
+                    $roundUsers = $tr->roundUsers;
+
+                    // best-N points per hole summed = alliance total
+                    $total = $roundUsers
+                        ->flatMap(fn ($ru) => $ru->holeScores)
+                        ->groupBy('hole_number')
+                        ->reduce(function ($carry, $scores, $holeNumber) use ($parByHole, $cfg) {
+                            $par = (int) ($parByHole[$holeNumber] ?? 4);
+                            $n = $par === 3 ? $cfg['par3'] : ($par === 5 ? $cfg['par5'] : $cfg['par4']);
+                            return $carry + $scores->pluck('points')->sortDesc()->take($n)->sum();
+                        }, 0);
+
+                    $holesPlayed = $roundUsers
+                        ->flatMap(fn ($ru) => $ru->holeScores->pluck('hole_number'))
+                        ->unique()
+                        ->count();
+
+                    $members = $roundUsers->map(fn ($ru) => [
+                        'id' => $ru->user->id,
+                        'name' => $ru->user->name,
+                        'surname' => $ru->user->surname,
+                        'handicap' => $ru->round_handicap,
+                        'points' => (int) $ru->holeScores->sum('points'),
+                        'strokes' => (int) $ru->holeScores->sum('strokes'),
+                        'holes_played' => $ru->holeScores->pluck('hole_number')->unique()->count(),
+                    ])->values()->all();
+
+                    return [
+                        'round_id' => $round->id,
+                        'total' => (int) $total,
+                        'holes_played' => $holesPlayed,
+                        'players' => $members,
+                    ];
+                })->filter()->values()->all();
+
+                $tournament->alliances = $alliances;
+            }
+
+            // Betterball (9) & Worst Ball (10) Stableford: each round_team is a team —
+            // rank by the sum of the better (9) / worse (10) member score on each hole.
+            if (in_array((int) $tournament->scoring_method_id, [9, 10], true)) {
+                $useWorst = (int) $tournament->scoring_method_id === 10;
+                $teams = $tournament->rounds->flatMap(function ($tr) use ($useWorst) {
+                    $round = $tr->round;
+                    if (! $round) {
+                        return [];
+                    }
+
+                    return $round->roundTeams->map(function ($team) use ($useWorst) {
+                        $members = $team->roundTeamUsers->map(fn ($rtu) => $rtu->roundUser)->filter();
+
+                        $byHole = $members->flatMap(fn ($ru) => $ru->holeScores)->groupBy('hole_number');
+                        $total = $byHole->reduce(fn ($carry, $scores) => $carry + (int) ($useWorst ? $scores->min('points') : $scores->max('points')), 0);
+
+                        return [
+                            'id' => $team->id,
+                            'name' => $team->name,
+                            'total' => (int) $total,
+                            'holes_played' => $byHole->count(),
+                            'players' => $members->map(fn ($ru) => [
+                                'id' => $ru->user->id,
+                                'name' => $ru->user->name,
+                                'surname' => $ru->user->surname,
+                                'handicap' => $ru->round_handicap,
+                                'points' => (int) $ru->holeScores->sum('points'),
+                                'strokes' => (int) $ru->holeScores->sum('strokes'),
+                                'holes_played' => $ru->holeScores->pluck('hole_number')->unique()->count(),
+                            ])->values()->all(),
+                        ];
+                    });
+                })->values()->all();
+
+                $tournament->betterball_teams = $teams;
+            }
+
             $tournament->unsetRelation('rounds');
         });
 

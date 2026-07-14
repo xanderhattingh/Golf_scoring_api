@@ -15,12 +15,13 @@ class FriendController extends Controller
     public function index(Request $request)
     {
         $user = Auth::user();
+        $busyIds = \App\Models\RoundUser::activeUserIds()->flip();
 
         $friends = $user->friends()
             ->select('users.id', 'users.name', 'users.surname', 'users.phone', 'users.handicap', 'users.invite_code', 'users.password')
             ->orderBy('users.name')
             ->get()
-            ->map(function ($friend) {
+            ->map(function ($friend) use ($busyIds) {
                 return [
                     'id' => $friend->id,
                     'name' => $friend->name,
@@ -29,6 +30,7 @@ class FriendController extends Controller
                     'handicap' => $friend->handicap,
                     'invite_code' => $friend->invite_code,
                     'is_registered' => ! is_null($friend->password),
+                    'in_active_round' => $busyIds->has($friend->id),
                 ];
             });
 

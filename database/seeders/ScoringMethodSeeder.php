@@ -55,6 +55,34 @@ class ScoringMethodSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'id' => 7,
+                'name' => 'Medal',
+                'description' => 'Net stroke play — gross strokes minus playing handicap, lowest net wins',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 8,
+                'name' => 'Four Ball Alliance',
+                'description' => 'Team Stableford — the best N scores per hole count, set per par',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 9,
+                'name' => 'Betterball Stableford',
+                'description' => 'Teams of two — the better Stableford score on each hole counts toward the team total',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+            [
+                'id' => 10,
+                'name' => 'Worst Ball Stableford',
+                'description' => 'Teams of two — the worse Stableford score on each hole counts toward the team total',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         foreach ($scoringMethods as $method) {

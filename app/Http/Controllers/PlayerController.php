@@ -47,11 +47,12 @@ class PlayerController extends Controller
     public function index(Request $request)
     {
         $currentUserId = Auth::id();
+        $busyIds = \App\Models\RoundUser::activeUserIds()->flip();
 
         $players = User::select('id', 'name', 'surname', 'phone', 'handicap', 'invite_code', 'created_at')
             ->orderBy('name')
             ->get()
-            ->map(function ($player) {
+            ->map(function ($player) use ($busyIds) {
                 return [
                     'id' => $player->id,
                     'name' => $player->name,
@@ -60,6 +61,7 @@ class PlayerController extends Controller
                     'handicap' => $player->handicap,
                     'invite_code' => $player->invite_code,
                     'is_registered' => $player->isRegistered(),
+                    'in_active_round' => $busyIds->has($player->id),
                 ];
             });
 

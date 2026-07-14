@@ -16,6 +16,7 @@ class Round extends Model
         'created_by',
         'date',
         'format',
+        'scoring_config',
         'completed',
         'current_hole',
         'starting_hole',
@@ -26,6 +27,7 @@ class Round extends Model
         'current_hole' => 'integer',
         'starting_hole' => 'integer',
         'date' => 'date',
+        'scoring_config' => 'array',
     ];
 
     public function course(): BelongsTo

@@ -16,8 +16,13 @@ class Tournaments extends Model
         'course_id',
         'tee_id',
         'scoring_method_id',
+        'scoring_config',
         'status',
         'invite_code',
+    ];
+
+    protected $casts = [
+        'scoring_config' => 'array',
     ];
 
     public function rounds(): HasMany

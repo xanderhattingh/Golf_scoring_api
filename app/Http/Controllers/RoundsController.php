@@ -92,6 +92,11 @@ class RoundsController extends Controller
             'teams.*.playerIds.*' => 'exists:users,id',
             'starting_hole' => 'nullable|integer|in:1,10',
             'tournament_id' => 'nullable|exists:tournaments,id',
+            // Four Ball Alliance: how many scores count per hole, by par
+            'scoring_config' => 'nullable|array',
+            'scoring_config.alliance.par3' => 'nullable|integer|min:1|max:4',
+            'scoring_config.alliance.par4' => 'nullable|integer|min:1|max:4',
+            'scoring_config.alliance.par5' => 'nullable|integer|min:1|max:4',
         ]);
 
         $courseTee = CourseTees::where('id', $validated['course_tee_id'])
@@ -112,6 +117,16 @@ class RoundsController extends Controller
             ], 422);
         }
 
+        // A player can only be in one active (incomplete) round at a time
+        $busyIds = RoundUser::activeUserIds()->intersect($validated['player_ids']);
+        if ($busyIds->isNotEmpty()) {
+            $names = User::whereIn('id', $busyIds)->pluck('name')->implode(', ');
+            return response()->json([
+                'success' => false,
+                'message' => "Already in an active round: {$names}. Finish that round first.",
+            ], 422);
+        }
+
         DB::beginTransaction();
 
         try {
@@ -121,6 +136,7 @@ class RoundsController extends Controller
                 'created_by' => Auth::id(),
                 'date' => $validated['date'],
                 'format' => $validated['format'],
+                'scoring_config' => $validated['scoring_config'] ?? null,
                 'completed' => false,
                 'current_hole' => $validated['starting_hole'] ?? 1,
                 'starting_hole' => $validated['starting_hole'] ?? 1,
@@ -322,6 +338,12 @@ class RoundsController extends Controller
 
             DB::commit();
 
+            // If this round just got completed and belongs to a tournament, mark the
+            // tournament completed once all of its rounds are done.
+            if (($validated['completed'] ?? false) === true) {
+                $this->syncTournamentCompletion($round->id);
+            }
+
             return response()->json([
                 'success' => true,
                 'data' => $this->formatRoundForDetail($round->fresh([
@@ -356,6 +378,29 @@ class RoundsController extends Controller
             'success' => true,
             'message' => 'Round deleted successfully',
         ]);
+    }
+
+    /**
+     * Mark a tournament completed (status = 1) once every round linked to it is done.
+     */
+    private function syncTournamentCompletion(int $roundId): void
+    {
+        $link = \App\Models\Tournament_Rounds::where('round_id', $roundId)->first();
+        if (! $link) {
+            return;
+        }
+
+        $tournament = \App\Models\Tournaments::with('rounds.round')->find($link->tournament_id);
+        if (! $tournament) {
+            return;
+        }
+
+        $rounds = $tournament->rounds->map(fn ($tr) => $tr->round)->filter();
+        $allDone = $rounds->isNotEmpty() && $rounds->every(fn ($r) => (bool) $r->completed);
+
+        if ($allDone && (int) $tournament->status !== 1) {
+            $tournament->update(['status' => 1]);
+        }
     }
 
     private function formatRoundForList($round): array
@@ -494,6 +539,7 @@ class RoundsController extends Controller
             'completed' => $round->completed,
             'created_at' => $round->created_at->toIso8601String(),
             'format' => $round->format,
+            'scoring_config' => $round->scoring_config,
             'teams' => $teams,
             'scores' => $scores,
             'currentHole' => $round->current_hole,
