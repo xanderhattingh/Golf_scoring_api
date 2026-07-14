@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\CourseController;
 use App\Http\Controllers\FriendController;
+use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\TournamentsController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\PlayerController;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Route;
 Route::post('/register', [UserController::class, 'register']);
 Route::post('/register/invite', [UserController::class, 'registerWithInvite']);
 Route::post('/login', [UserController::class, 'login']);
+Route::post('/password/forgot', [PasswordResetController::class, 'forgot']);
+Route::post('/password/reset', [PasswordResetController::class, 'reset']);
 
 /*
 |--------------------------------------------------------------------------

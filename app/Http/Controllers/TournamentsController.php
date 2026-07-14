@@ -181,9 +181,9 @@ class TournamentsController extends Controller
 
             $tournament->setRelation('players', $players);
 
-            // Four Ball Alliance: each round is one alliance — rank teams by their
-            // best-N-per-hole total (N by par, from the tournament's config).
-            if ((int) $tournament->scoring_method_id === 8) {
+            // Four Ball (8) & Two Ball (11) Alliance: each round is one alliance — rank
+            // teams by their best-N-per-hole total (N by par, from the tournament's config).
+            if (in_array((int) $tournament->scoring_method_id, [8, 11], true)) {
                 $cfg = $tournament->scoring_config['alliance'] ?? ['par3' => 4, 'par4' => 4, 'par5' => 4];
 
                 $alliances = $tournament->rounds->map(function ($tr) use ($cfg) {

@@ -83,6 +83,13 @@ class ScoringMethodSeeder extends Seeder
                 'created_at' => now(),
                 'updated_at' => now(),
             ],
+            [
+                'id' => 11,
+                'name' => 'Two Ball Alliance',
+                'description' => 'Team Stableford for a pair — the best N scores per hole count, set per par',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
         ];
 
         foreach ($scoringMethods as $method) {
